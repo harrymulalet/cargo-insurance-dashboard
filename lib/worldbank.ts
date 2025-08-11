@@ -1,66 +1,45 @@
-// Helper delay function
-async function delay(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms))
+const WB_BASE_URL = "https://api.worldbank.org/v2/country"
+const INDICATOR_TRADE_OPENNESS = "NE.TRD.GNFS.ZS" // Trade as % of GDP
+
+interface WbDataPoint {
+  indicator: { id: string; value: string }
+  country: { id: string; value: string }
+  countryiso3code: string
+  date: string
+  value: number | null
+  unit: string
+  obs_status: string
+  decimal: number
 }
 
 export async function getTradeOpennessWB(iso3: string): Promise<{ year: number; value: number; url: string } | null> {
-  const url = `https://api.worldbank.org/v2/country/${iso3}/indicator/TG.VAL.TOTL.GD.ZS?format=json&MRV=10`
-
-  const tryFetch = async (attempt: number): Promise<{ year: number; value: number; url: string } | null> => {
-    try {
-      const res = await fetch(url, { headers: { Accept: "application/json" } })
-
-      // Handle rate limits and transient errors
-      if ([429, 503].includes(res.status)) {
-        if (attempt < 4) {
-          // Exponential backoff: 500ms, 1000ms, 2000ms
-          await delay(500 * Math.pow(2, attempt - 1))
-          return tryFetch(attempt + 1)
-        }
-        return null
-      }
-
-      // Read as text, then parse JSON safely
-      const text = await res.text()
-      if (!res.ok) {
-        console.warn("World Bank API non-OK:", res.status, text?.slice(0, 200))
-        return null
-      }
-
-      let json: any
-      try {
-        json = JSON.parse(text)
-      } catch {
-        if (attempt < 4 && /too many/i.test(text)) {
-          await delay(500 * Math.pow(2, attempt - 1))
-          return tryFetch(attempt + 1)
-        }
-        console.warn("World Bank response not JSON:", text?.slice(0, 200))
-        return null
-      }
-
-      const series = Array.isArray(json) ? json[1] : null
-      if (series && Array.isArray(series)) {
-        // Find most recent non-null value
-        const latest = series.find((d: any) => d?.value !== null)
-        if (latest) {
-          return {
-            year: Number(latest.date),
-            value: Number(latest.value),
-            url,
-          }
-        }
-      }
-      return null
-    } catch (err) {
-      if (attempt < 4) {
-        await delay(500 * Math.pow(2, attempt - 1))
-        return tryFetch(attempt + 1)
-      }
-      console.error("World Bank fetch failed:", err)
+  const url = `${WB_BASE_URL}/${iso3}/indicator/${INDICATOR_TRADE_OPENNESS}?format=json&date=2018:2025`
+  try {
+    const res = await fetch(url, { cache: "force-cache" })
+    if (!res.ok) {
+      console.warn(`World Bank API request failed for ${iso3} with status ${res.status}`)
       return null
     }
-  }
 
-  return tryFetch(1)
+    const json = await res.json()
+    if (!Array.isArray(json) || json.length < 2 || !Array.isArray(json[1])) {
+      return null
+    }
+
+    const latestData = json[1]
+      .filter((d: WbDataPoint) => d.value !== null)
+      .sort((a: WbDataPoint, b: WbDataPoint) => Number.parseInt(b.date, 10) - Number.parseInt(a.date, 10))[0]
+
+    if (latestData && latestData.value) {
+      return {
+        year: Number.parseInt(latestData.date, 10),
+        value: Number.parseFloat(latestData.value.toFixed(1)),
+        url,
+      }
+    }
+    return null
+  } catch (error) {
+    console.error(`Error fetching World Bank data for ${iso3}:`, error)
+    return null
+  }
 }

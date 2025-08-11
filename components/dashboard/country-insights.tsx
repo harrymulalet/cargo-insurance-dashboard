@@ -2,144 +2,113 @@
 
 import type React from "react"
 import { useState, useEffect, useMemo } from "react"
-import type { ConversionMetrics, Filters, NacoraDataRow, KNDataRow } from "@/lib/types"
+import type { ConversionMetrics, Filters, NacoraDataRow, KNDataRow, ExternalTradeData } from "@/lib/types"
 import Chart from "./chart"
 import { KPICard } from "./kpi-card"
-import { Package, TrendingUp, DollarSign, AlertCircle, Info } from "lucide-react"
-import type { MarketOverview } from "@/lib/wto" // type-only import to avoid runtime server code on client
+import { Package, TrendingUp, DollarSign, AlertCircle, Ship, Percent, Globe } from "lucide-react"
 import { countryNameToIso3 } from "@/lib/country-iso-map"
-
-// --- Interfaces for external data ---
-interface RiskType {
-  economic: number
-  political: number
-  operational: number
-}
-
-// --- API Fetcher Stub (keep as placeholder for risk) ---
-async function fetchRiskData(countryCode: string): Promise<RiskType> {
-  return Promise.resolve({
-    economic: Math.random() * 6 + 2,
-    political: Math.random() * 7 + 1,
-    operational: Math.random() * 5 + 3,
-  })
-}
 
 // --- Sub-components for the Country Insights Tab ---
 
-const MarketOverviewTable: React.FC<{ country: string; data?: MarketOverview }> = ({ country, data }) => {
-  if (!data) {
+const ExternalDataDisplay: React.FC<{ country: string; data?: ExternalTradeData; isLoading: boolean }> = ({
+  country,
+  data,
+  isLoading,
+}) => {
+  if (isLoading) {
     return (
       <div className="bg-white rounded-lg shadow-md p-4 h-full flex items-center justify-center">
-        <p className="text-sm text-gray-500">Loading trade data...</p>
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="text-sm text-gray-500 mt-2">Loading external data...</p>
+        </div>
       </div>
     )
   }
 
-  const formatValue = (value: number | undefined) =>
-    value?.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) || "N/A"
-
-  const SourceTooltip: React.FC<{ url?: string; children: React.ReactNode }> = ({ url, children }) => (
-    <span className="relative group">
-      {children}
-      {url && <Info className="inline-block w-3 h-3 ml-1 text-gray-400 group-hover:text-blue-600" />}
-      {url && (
-        <span className="absolute bottom-full mb-2 w-64 p-2 bg-gray-800 text-white text-xs rounded-md opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-          {"Source: "}
-          {url.split("?")[0]}
-        </span>
-      )}
-    </span>
-  )
+  const renderValue = (value: number | undefined, unit: string, period?: string | number) => {
+    if (value !== undefined && period) {
+      return (
+        <td className="py-1 text-right">
+          <span className="font-semibold">{`${value.toLocaleString(undefined, {
+            minimumFractionDigits: 1,
+            maximumFractionDigits: 1,
+          })} ${unit}`}</span>
+          <p className="text-xs text-gray-400 -mt-1">as of {period}</p>
+        </td>
+      )
+    }
+    return (
+      <td className="py-1 text-right">
+        <span className="font-semibold text-gray-500">N/A</span>
+        <p className="text-xs text-gray-400 -mt-1">Data unavailable</p>
+      </td>
+    )
+  }
 
   return (
     <div className="bg-white rounded-lg shadow-md p-6">
-      <h3 className="text-lg font-semibold mb-3">{country} – Market Overview</h3>
+      <h3 className="text-lg font-semibold mb-3">{country} – External Trade Snapshot</h3>
       <table className="min-w-full text-sm text-left text-gray-700">
-        <thead className="text-gray-500 border-b">
-          <tr>
-            <th className="py-2 pr-4 font-medium">Indicator</th>
-            <th className="py-2 font-medium">Value</th>
+        <thead>
+          <tr className="border-b">
+            <th className="py-2 pr-4 font-medium flex items-center gap-2">
+              <Ship size={16} />
+              Merchandise Trade
+            </th>
+            <th className="py-2 font-medium text-right">Value (USD)</th>
           </tr>
         </thead>
         <tbody>
           <tr className="border-b">
-            <td className="py-2 pr-4">
-              <SourceTooltip url={data.sources.imports}>
-                Merchandise Imports {data.importsYear && `(${data.importsYear})`}
-              </SourceTooltip>
-            </td>
-            <td className="py-2 font-semibold">
-              {data.importsUsdBn !== undefined ? `${formatValue(data.importsUsdBn)} bn` : "N/A"}
-            </td>
-          </tr>
-          <tr className="border-b">
-            <td className="py-2 pr-4">
-              <SourceTooltip url={data.sources.exports}>
-                Merchandise Exports {data.exportsYear && `(${data.exportsYear})`}
-              </SourceTooltip>
-            </td>
-            <td className="py-2 font-semibold">
-              {data.exportsUsdBn !== undefined ? `${formatValue(data.exportsUsdBn)} bn` : "N/A"}
-            </td>
+            <td className="py-2 pr-4">Exports (Monthly/Quarterly)</td>
+            {renderValue(
+              data?.monthlyMerchandise?.exports?.valueUsdBn,
+              "bn",
+              data?.monthlyMerchandise?.exports?.period,
+            )}
           </tr>
           <tr>
-            <td className="py-2 pr-4">
-              <SourceTooltip url={data.sources.openness}>
-                Trade Openness {data.tradeOpennessYear && `(${data.tradeOpennessYear})`}
-              </SourceTooltip>
-            </td>
-            <td className="py-2 font-semibold">
-              {data.tradeOpennessPct !== undefined ? `${formatValue(data.tradeOpennessPct)}%` : "N/A"}
-            </td>
+            <td className="py-2 pr-4">Imports (Monthly/Quarterly)</td>
+            {renderValue(
+              data?.monthlyMerchandise?.imports?.valueUsdBn,
+              "bn",
+              data?.monthlyMerchandise?.imports?.period,
+            )}
           </tr>
         </tbody>
       </table>
-      <p className="text-xs text-gray-400 mt-2">Trade data from WTO, openness from World Bank.</p>
-    </div>
-  )
-}
 
-const RiskProfile: React.FC<{ country: string; risk?: RiskType }> = ({ country, risk }) => {
-  const categories = ["Economic", "Political", "Operational"]
-  const values = risk ? [risk.economic, risk.political, risk.operational] : [0, 0, 0]
-  const chartData = [
-    {
-      type: "scatterpolar",
-      r: [...values, values[0]],
-      theta: [...categories, categories[0]],
-      fill: "toself",
-      name: country,
-      marker: { color: "rgba(40, 140, 250, 0.6)" },
-    },
-  ] as any[]
-  const chartLayout: any = {
-    title: "Risk Profile",
-    polar: { radialaxis: { visible: true, range: [0, 10] } },
-    showlegend: false,
-    height: 300,
-    margin: { t: 50, r: 50, b: 50, l: 50 },
-  }
-
-  if (!risk) {
-    return (
-      <div className="bg-white rounded-lg shadow-md p-4 h-full flex items-center justify-center">
-        <p className="text-sm text-gray-500">Loading risk data...</p>
-      </div>
-    )
-  }
-
-  return (
-    <div className="bg-white rounded-lg shadow-md p-6">
-      <Chart data={chartData} layout={chartLayout} className="h-[300px]" />
-      <p className="mt-2 text-xs text-gray-600 text-center">
-        {"Risk scores (0=low to 10=high): Economic "}
-        {risk.economic.toFixed(1)}
-        {", Political "}
-        {risk.political.toFixed(1)}
-        {", Operational "}
-        {risk.operational.toFixed(1)}
-      </p>
+      {(data?.mfnTariff || data?.tradeOpenness) && (
+        <table className="min-w-full text-sm text-left text-gray-700 mt-4">
+          <thead>
+            <tr className="border-b">
+              <th className="py-2 pr-4 font-medium flex items-center gap-2">
+                <Globe size={16} />
+                Trade Policy & Context
+              </th>
+              <th className="py-2 font-medium text-right">Value</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data?.mfnTariff && (
+              <tr className="border-b">
+                <td className="py-2 pr-4 flex items-center gap-2">
+                  <Percent size={14} /> MFN Tariff (Simple Avg.)
+                </td>
+                {renderValue(data.mfnTariff.simpleAvgPct, "%", data.mfnTariff.year)}
+              </tr>
+            )}
+            {data?.tradeOpenness && (
+              <tr>
+                <td className="py-2 pr-4">Trade Openness (% of GDP)</td>
+                {renderValue(data.tradeOpenness.value, "%", data.tradeOpenness.year)}
+              </tr>
+            )}
+          </tbody>
+        </table>
+      )}
+      <p className="text-xs text-gray-400 mt-2">Sources: World Trade Organization (WTO), World Bank.</p>
     </div>
   )
 }
@@ -225,8 +194,8 @@ const formatPremiumValue = (value: number): string => {
 }
 
 export function CountryInsights({ conversionMetrics, filters, filteredData }: CountryInsightsProps) {
-  const [marketOverviewCache, setMarketOverviewCache] = useState<Record<string, MarketOverview>>({})
-  const [riskCache, setRiskCache] = useState<Record<string, RiskType>>({})
+  const [externalDataCache, setExternalDataCache] = useState<Record<string, ExternalTradeData>>({})
+  const [loadingCountries, setLoadingCountries] = useState<Record<string, boolean>>({})
 
   const countries = useMemo(() => {
     if (!conversionMetrics) return []
@@ -238,25 +207,26 @@ export function CountryInsights({ conversionMetrics, filters, filteredData }: Co
       const iso3 = countryNameToIso3[country]
       if (!iso3) return
 
-      if (!marketOverviewCache[iso3]) {
+      if (!externalDataCache[iso3] && !loadingCountries[iso3]) {
+        setLoadingCountries((prev) => ({ ...prev, [iso3]: true }))
         try {
           const res = await fetch(`/api/wto?iso3=${iso3}`)
           if (res.ok) {
-            const json: MarketOverview = await res.json()
-            setMarketOverviewCache((prev) => ({ ...prev, [iso3]: json }))
+            const json: ExternalTradeData = await res.json()
+            setExternalDataCache((prev) => ({ ...prev, [iso3]: json }))
           } else {
-            console.warn("WTO API route returned non-OK:", res.status)
+            console.warn(`External data API route for ${iso3} returned non-OK:`, res.status)
+            setExternalDataCache((prev) => ({ ...prev, [iso3]: { iso3 } as ExternalTradeData }))
           }
         } catch (e) {
-          console.error("Failed to load WTO market overview:", e)
+          console.error(`Failed to load external data for ${iso3}:`, e)
+          setExternalDataCache((prev) => ({ ...prev, [iso3]: { iso3 } as ExternalTradeData }))
+        } finally {
+          setLoadingCountries((prev) => ({ ...prev, [iso3]: false }))
         }
       }
-
-      if (!riskCache[country]) {
-        fetchRiskData(country).then((data) => setRiskCache((prev) => ({ ...prev, [country]: data })))
-      }
     })
-  }, [countries, marketOverviewCache, riskCache])
+  }, [countries, externalDataCache, loadingCountries])
 
   const premiumLabelSuffix = useMemo(() => {
     const { kn } = filteredData
@@ -326,8 +296,8 @@ export function CountryInsights({ conversionMetrics, filters, filteredData }: Co
         ]
 
         const iso3 = countryNameToIso3[country]
-        const marketData = iso3 ? marketOverviewCache[iso3] : undefined
-        const riskData = riskCache[country]
+        const externalData = iso3 ? externalDataCache[iso3] : undefined
+        const isLoading = iso3 ? loadingCountries[iso3] : false
 
         return (
           <div key={country} className="bg-gray-100 p-4 sm:p-6 rounded-lg shadow-inner border">
@@ -340,8 +310,30 @@ export function CountryInsights({ conversionMetrics, filters, filteredData }: Co
               </div>
               <CountryCharts data={countryConversionData} country={country} />
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <RiskProfile country={country} risk={riskData} />
-                <MarketOverviewTable country={country} data={marketData} />
+                <div className="bg-white rounded-lg shadow-md p-6">
+                  <h3 className="text-lg font-semibold mb-4">Strategic Insights</h3>
+                  <ul className="space-y-3 text-sm">
+                    <li className="flex items-start gap-3">
+                      <strong className="text-blue-600 font-bold mt-1">›</strong>
+                      <span>
+                        Focus on increasing conversion for <strong>Sea</strong> and <strong>Air</strong> logistics,
+                        where volume is highest.
+                      </span>
+                    </li>
+                    <li className="flex items-start gap-3">
+                      <strong className="text-green-600 font-bold mt-1">›</strong>
+                      <span>Leverage high average premium per shipment to offer tiered insurance products.</span>
+                    </li>
+                    <li className="flex items-start gap-3">
+                      <strong className="text-orange-600 font-bold mt-1">›</strong>
+                      <span>
+                        Compare internal conversion trends against the country's overall trade openness to identify
+                        market potential.
+                      </span>
+                    </li>
+                  </ul>
+                </div>
+                <ExternalDataDisplay country={country} data={externalData} isLoading={!!isLoading} />
               </div>
             </div>
           </div>
