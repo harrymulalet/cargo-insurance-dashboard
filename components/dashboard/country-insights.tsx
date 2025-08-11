@@ -15,6 +15,7 @@ const ExternalDataDisplay: React.FC<{ country: string; data?: ExternalTradeData;
   data,
   isLoading,
 }) => {
+  console.log("ExternalDataDisplay props:", { country, data, isLoading })
   if (isLoading) {
     return (
       <div className="bg-white rounded-lg shadow-md p-4 h-full flex items-center justify-center">
@@ -27,14 +28,14 @@ const ExternalDataDisplay: React.FC<{ country: string; data?: ExternalTradeData;
   }
 
   const renderValue = (value: number | undefined, unit: string, period?: string | number) => {
-    if (value !== undefined && period) {
+    if (value !== undefined && value !== null) {
       return (
         <td className="py-1 text-right">
           <span className="font-semibold">{`${value.toLocaleString(undefined, {
             minimumFractionDigits: 1,
             maximumFractionDigits: 1,
           })} ${unit}`}</span>
-          <p className="text-xs text-gray-400 -mt-1">as of {period}</p>
+          {period && <p className="text-xs text-gray-400 -mt-1">as of {period}</p>}
         </td>
       )
     }
